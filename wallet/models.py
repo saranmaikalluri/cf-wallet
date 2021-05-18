@@ -1,5 +1,5 @@
+from main.models import Aspnetusers
 from django.db import models
-from django.contrib.auth.models import User
 from django.db.models.fields import related
 from django.utils.translation import ugettext as _
 import datetime
@@ -56,6 +56,12 @@ class Wallet(models.Model):
     def empty_wallet_balance(self):
         self.balance=0
         self.save()
+    def get_user(self,user):
+        user_data= Aspnetusers.objects.get(id=user)
+        if user_data:
+            print(user_data)
+            return user_data.username
+
 
     
     

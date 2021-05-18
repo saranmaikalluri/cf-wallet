@@ -20,7 +20,7 @@ class Student(models.Model):
     state = models.CharField(db_column='State', max_length=500)  # Field name made lowercase.
     countryid = models.IntegerField(db_column='CountryId')  # Field name made lowercase.
     postalcode = models.CharField(db_column='PostalCode', max_length=50, blank=True, null=True)  # Field name made lowercase.
-    partnerid = models.ForeignKey('core.Aspnetusers', models.DO_NOTHING, db_column='PartnerId')  # Field name made lowercase.
+    partnerid = models.ForeignKey('main.Aspnetusers', models.DO_NOTHING, db_column='PartnerId')  # Field name made lowercase.
     createdby = models.CharField(db_column='CreatedBy', max_length=128, blank=True, null=True)  # Field name made lowercase.
     createdon = models.DateTimeField(db_column='CreatedOn', blank=True, null=True)  # Field name made lowercase.
     modifiedby = models.CharField(db_column='ModifiedBy', max_length=128, blank=True, null=True)  # Field name made lowercase.
@@ -100,15 +100,15 @@ class Courses(models.Model):
 class Acknowledgements(models.Model):
     acknowledgementid = models.AutoField(db_column='AcknowledgementId', primary_key=True)   
     acknowledgementnumber = models.CharField(db_column='AcknowledgementNumber', max_length=500, blank=True, null=True, verbose_name='Acknowledgement Number')   
-    student = models.ForeignKey('core.Student', on_delete= models.DO_NOTHING, db_column='StudentId', blank=True, null=True, verbose_name='Student')   
-    course = models.ForeignKey('core.Courses', on_delete= models.DO_NOTHING, db_column='CourseId', blank=True, null=True, verbose_name='Course')   
+    student = models.ForeignKey('main.Student', on_delete= models.DO_NOTHING, db_column='StudentId', blank=True, null=True, verbose_name='Student')   
+    course = models.ForeignKey('main.Courses', on_delete= models.DO_NOTHING, db_column='CourseId', blank=True, null=True, verbose_name='Course')   
     applicationstageid = models.IntegerField(db_column='ApplicationStageId', blank=True, null=True, verbose_name='Application Stage')   
     remarks = models.TextField(db_column='Remarks', blank=True, null=True, verbose_name='Remarks')   
     createdby = models.CharField(db_column='CreatedBy', max_length=128, blank=True, null=True)  # Field name made lowercase.
     createdon = models.DateTimeField(db_column='CreatedOn', auto_now_add=True)   
     modifiedby = models.CharField(db_column='ModifiedBy', max_length=128, blank=True, null=True)  # Field name made lowercase.
     modifiedon = models.DateTimeField(db_column='ModifiedOn', auto_now=True)   
-    staff= models.ForeignKey('core.Aspnetusers', blank=True, null=True,db_column='StaffId',on_delete=models.DO_NOTHING, verbose_name='Staff')
+    staff= models.ForeignKey('main.Aspnetusers', blank=True, null=True,db_column='StaffId',on_delete=models.DO_NOTHING, verbose_name='Staff')
     tag= models.CharField(db_column='TagId', blank=True, null=True, verbose_name='Tag', max_length=200)
     studentreferenceno = models.CharField(db_column='StudentReferenceNo', max_length=200, blank=True, null=True, verbose_name='Student Reference No')   
 
@@ -138,8 +138,8 @@ class Aspnetroles(models.Model):
         return str(self.name)
 
 class Aspnetuserroles(models.Model):
-    userid = models.ForeignKey('core.Aspnetusers', on_delete= models.DO_NOTHING, db_column='UserId', primary_key=True, related_name="Auth_user_role", verbose_name='User')    
-    roleid = models.ForeignKey('core.Aspnetroles', on_delete= models.DO_NOTHING, db_column='RoleId',verbose_name='Role')    
+    userid = models.ForeignKey('main.Aspnetusers', on_delete= models.DO_NOTHING, db_column='UserId', primary_key=True, related_name="Auth_user_role", verbose_name='User')    
+    roleid = models.ForeignKey('main.Aspnetroles', on_delete= models.DO_NOTHING, db_column='RoleId',verbose_name='Role')    
 
     class Meta:
         managed = False

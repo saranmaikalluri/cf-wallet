@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Courses,Universities,Student,Acknowledgements
+from .models import Aspnetusers, Aspnetuserroles, Acknowledgements, Aspnetroles
 
 
 
@@ -26,3 +27,7 @@ class AcknowledgementsSerializer(serializers.Serializer):
         model=Acknowledgements
         fields='__all__'
 
+class AspNetUserSerializer(serializers.Serializer):
+    class Meta:
+        model= Aspnetusers
+        fields=['email','username','id']

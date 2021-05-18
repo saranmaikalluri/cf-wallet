@@ -3,10 +3,10 @@ from functools import partial, reduce
 import operator
 import datetime
 import calendar
+import wallet
 from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.models import User
 from django.http import HttpResponse, response
 import rest_framework
 from rest_framework import serializers
@@ -21,25 +21,29 @@ from wallet.models import Wallet,WalletTransactions,StaffPartnerTransactions,Wal
 from wallet.helpers import prev_month_range,prev_year_range
 from django.shortcuts import get_object_or_404
 from rest_framework.pagination import CursorPagination
-from core.models import Student,Universities,Courses,Acknowledgements,Aspnetuserroles
+from main.models import Aspnetusers, Student,Universities,Courses,Acknowledgements,Aspnetuserroles
 from twilio.rest import Client
 from django.conf import settings
 from .otp_funcs import send_otp,verify_otp
+from .paginations import CursorSetPagination, StandardResultsSetPagination
 from twilio.base.exceptions import TwilioRestException
+from main.serializers import AspNetUserSerializer
+from django.db import connection
+from django.http import JsonResponse
 
 
 @api_view(['GET','PUT'])
 def wallet_detail(request):
-    user_id= request.GET.get('user_id')
+    user= request.GET.get('user')
     try:
-        wallet_data= Wallet.objects.get(user=user_id)
+        wallet_data= Wallet.objects.get(user=str(user))
     except Wallet.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)   
     if request.method=='GET':
         serializer= WalletSerializer(wallet_data)
         return Response(serializer.data)
     elif request.method=='PUT':
-        wallet_data= Wallet.objects.get(user=user_id)
+        wallet_data= Wallet.objects.get(user=user)
         balance= request.data['balance']
         print(balance)
         serializer = WalletSerializer(wallet_data, data=request.data)
@@ -55,6 +59,20 @@ def wallet_detail(request):
         return Response(serializer.errors,
                         status=status.HTTP_400_BAD_REQUEST)
     
+
+@api_view(['GET'])
+def user_transactions_list(request):
+    # wallet_id= request.GET.get('wallet_id')
+    wallet_id= request.data['wallet_id']
+    print(wallet_id)
+    try:
+        transactions_data= WalletTransactions.objects.filter(wallet=wallet_id)
+        print(transactions_data)
+        serializer= TransactionsSerializer(transactions_data,many=True)
+        return Response(serializer.data)
+    except WalletTransactions.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
 def transaction_search(request):
     user = request.GET.get('user')
     wallet = request.GET.get('wallet')
@@ -124,145 +142,86 @@ def transaction_search(request):
 
 
 
-@api_view(['GET'])
-def transactions_list(request):
-    wallet_id= request.GET.get('wallet_id')
-    print(wallet_id)
-    try:
-        transactions_data= WalletTransactions.objects.filter(wallet=wallet_id)
-        print(transactions_data)
-        serializer= TransactionsSerializer(transactions_data,many=True)
-        return Response(serializer.data)
-    except WalletTransactions.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
-
-@api_view(['POST'])
-def add_transaction(request):
-    wallet_id= request.data['wallet_id']
-    student_id= request.data['student_id']
-    ack_id= request.data['ack_id']
-    university_id= request.data['university_id']
-    course_id= request.data['course_id']
-    transaction_amount= request.data['transaction_amount']
-    currency= request.data['currency']
-    markup_fee= request.data['markup_fee']
-    exchange_rate= request.data['exchange_rate']
-    exchange_amount= request.data['exchange_amount']
-    couponcode= request.data['couponcode']
-    user_id=request.data['user_id']
-    try:
-        wallet_data=Wallet.objects.get(pk=wallet_id)
-        student_data=Student.objects.get(pk=student_id)
-        application_data=Acknowledgements.objects.get(pk=ack_id)
-        university_data= Universities.objects.get(pk=university_id)
-        course_data=Courses.objects.get(pk=course_id)
-        user_data= User.objects.get(pk=user_id)
-        wallet_balance=wallet_data.balance
-        if wallet_data.valid_withdraw_amount(transaction_amount)==True:
-            print("yes")
-            transaction_balance=float(wallet_balance)-float(transaction_amount)
-            print(transaction_balance)
-            transaction_data= WalletTransactions.objects.create(wallet=wallet_data,transaction_amount=transaction_amount,balance=transaction_balance)
-            print("data is",transaction_data)
-            transaction_data.save()
-            # transaction_details= TransactionDetail.objects.create(transaction=transaction_data,student=student_data,
-            #                         application=application_data,course=course_data, university=university_data,
-            #                         currency=currency,markup_fee=markup_fee,exchange_rate=exchange_rate,exchange_amount=exchange_amount,couponcode=couponcode,staff_id=user_data)
-            # transaction_details.save()
-            # serializer= TransactionDetailsSerializer(transaction_details)
-            # if serializer.is_valid():
-                # serializer.save()
-            # return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
-        # return Response(serializer.errors,
-                        # status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({'message':str(e),
-                        'status':status.HTTP_400_BAD_REQUEST})
-
-
-@api_view(['POST','PUT'])
-def send_money_to_partner(request):
-    staff_id= request.data['staff_id']
-    partner_id= request.data['partner_id']
-    amount= request.data['amount']
-    remarks=request.data['remarks']
-    if float(amount)<=float(10000):
-        otp_user= WalletOTPAdmin.objects.get(transaction_limit=int(10000))
-        opt_mobile_no= otp_user.mobile_no
-        print("yes")
-        partner_wallet= Wallet.objects.get(user=partner_id)
-        print(partner_wallet)
-        partner_balance= partner_wallet.deposit(int(amount))
-        print(partner_wallet)
-        serializer = WalletSerializer(partner_wallet)
-        print(serializer.data)
-        td=serializer.data
-        transaction_data= WalletTransactions.objects.create(wallet=partner_wallet,transaction_date=td['updated_on'],
-                  transaction_amount=amount,balance=td['balance'],remarks=remarks) 
-        transaction_data.save() 
-        serializer= TransactionsSerializer(transaction_data)                  
-        return Response(serializer.data, status=status.HTTP_204_NO_CONTENT)
-    return Response({'message':'Requested transaction amount is greater than the allocated limit', 'status':status.HTTP_401_UNAUTHORIZED})
-
-
-# @api_view(['POST'])
-# def close_partner_account(request):
-#     staff_id= request.data['staff_id']
-#     partner_id= request.data['partner_id']
-#     remarks=request.data['remarks']
-#     staff_role= UserRoles.objects.get(user=staff_id)
-#     st_role= staff_role.role.name
-#     if st_role=='staff':
-#         partner_wallet= Wallet.objects.get(user=partner_id)
-#         closing_balance=partner_wallet.balance
-#         print(closing_balance)
-#         partner_wallet.empty_wallet_balance()
-#         serializer= WalletSerializer(partner_wallet)
-#         td=serializer.data
-#         if int(closing_balance)>int(0):
-#             transaction_data= WalletTransactions.objects.create(wallet=partner_wallet,transaction_date=td['updated_on'],
-#                   transaction_amount=closing_balance,balance=0,remarks=remarks) 
-#             transaction_data.save() 
-#             serializer= TransactionsSerializer(transaction_data)   
-#             print(serializer.data)        
-#             return Response(serializer.data, status=status.HTTP_200_OK)
-#         else:
-#             return Response({'message':'Partner wallet is empty','status':status.HTTP_204_NO_CONTENT})      
-#     else:
-#         return Response({'message':'Invalid request','status':status.HTTP_401_UNAUTHORIZED})
-
-class CursorSetPagination(CursorPagination):
-    page_size = 2
-    page_size_query_param = 'page_size'
-    ordering = '-transaction_date'
-
 class TransactionsViewSet(viewsets.ModelViewSet):
     serializer_class=TransactionsSerializer
-    pagination_class=CursorSetPagination
+    pagination_class=StandardResultsSetPagination
     def get_queryset(self):
         transactions = transaction_search(self.request)
         return transactions.order_by('-transaction_date')
 
 @api_view(['POST'])
 def send_otp_to_user(request):
-    mobile_no=request.data['mobile_no']  
-    try:
-        send_otp(mobile_no)
-        return Response({'message':'OTP sent successfully','status':status.HTTP_200_OK})
-    except Exception as e:
-        print(str(e))
-        return Response({'message':str(e),'status':status.HTTP_400_BAD_REQUEST})
+    # mobile_no=request.data['mobile_no']
+    partner_id= request.data['partner_id']
+    amount= request.data['amount']
+    partner_data= Aspnetusers.objects.get(id= partner_id)
+    partner_name= partner_data.username
+    if int(amount)<=int(10000):
+        user_data= WalletOTPAdmin.objects.get(transaction_limit=int(10000))
+        user_mobile= user_data.mobile_no
+        user_mobile='+91'+str(user_mobile)
+        print(user_mobile)
+        try:
+            send_otp(user_mobile)
+            return Response({'message':f'OTP sent successfully for initiating transaction of {partner_name}','status':status.HTTP_200_OK})
+        except Exception as e:
+            print(str(e))
+            return Response({'message':str(e),'status':status.HTTP_400_BAD_REQUEST})
+    if int(amount)>int(10000):
+        user_data= WalletOTPAdmin.objects.get(transaction_limit=int(1000000))
+        user_mobile= user_data.mobile_no
+        user_mobile='+91'+str(user_mobile)
+        print(user_mobile)
+        try:
+            send_otp(user_mobile)
+            return Response({'message':f'OTP sent successfully for initiating transaction of {partner_name} ','status':status.HTTP_200_OK})
+        except Exception as e:
+            print(str(e))
+            return Response({'message':str(e),'status':status.HTTP_400_BAD_REQUEST})
+
     
 @api_view(['POST'])
 def verify_user_otp(request):
     mobile_no=request.data['mobile_no']
     otp= request.data['otp']
+    partner_id= request.data['partner_id']
+    staff_id= request.data['staff_id']
+    transaction_amount= request.data['amount']
+    partner_wallet= Wallet.objects.get(user=str(partner_id))
+    partner_balance= partner_wallet.balance
+    partner_data= Aspnetusers.objects.get(id= partner_id)
+    partner_name= partner_data.username
     try:
         data= verify_otp(mobile_no,otp)  
         if data=='approved':
-            return Response({'message':'OTP verified successfully','status':status.HTTP_200_OK})
+            partner_wallet.deposit(int(transaction_amount))
+            transaction_data= WalletTransactions.objects.create(wallet=partner_wallet,transaction_amount=transaction_amount,balance=partner_balance)
+            transaction_data.save()
+            staff_transaction= StaffPartnerTransactions.objects.create(wallet_transaction_id=transaction_data,staff_id=staff_id,partner_id=partner_id)
+            staff_transaction.save()
+            return Response({'message':f'OTP verified successfully and amount credited to {partner_name}','status':status.HTTP_200_OK})
         else:
             return Response({'message':'Unable to verify OTP. Please try again','status':status.HTTP_400_BAD_REQUEST})
     except Exception as e:
         print(str(e))
         return Response({'message':str(e),'status':status.HTTP_400_BAD_REQUEST})
+
+
+
+
+@api_view(['GET'])
+def get_partners(request):
+    cursor= connection.cursor()
+    cursor.execute("select a.Id, a.UserName, a.Email from AspNetUsers a join AspNetUserRoles r on a.Id = r.UserId and r.RoleId=7")
+    data= cursor.fetchall()
+    res=[{'id':i[0],'username':i[1],'email':i[2]} for i in data]
+    print(data)
+    try:
+        query= request.data['query']
+        if len(query)>=3:
+            filters = dict(map(res['email'],query))
+            qs=res.filter(**filters)
+            print(qs)
+        return JsonResponse(res, status=status.HTTP_200_OK,safe=False)
+    except Exception as e:
+        return JsonResponse({'message':str(e),'status':status.HTTP_400_BAD_REQUEST})

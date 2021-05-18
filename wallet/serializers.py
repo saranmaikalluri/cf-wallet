@@ -1,12 +1,11 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
 from .models import WalletOTPAdmin,WalletEmailAdmin
 from .models import Wallet,WalletTransactions,RazorpayTransactions,StaffPartnerTransactions
 
 class WalletSerializer(serializers.ModelSerializer):
     class Meta:
         model=Wallet
-        fields='__all__'
+        fields=['balance','user']
     def update(self, instance, validated_data):
         balance= validated_data.get('balance')
         instance.balance= validated_data.get(instance.deposit(balance),instance.balance)
